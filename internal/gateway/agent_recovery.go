@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -471,7 +472,7 @@ func (s *Server) relayCodexAgent(ctx context.Context, h http.Header, sealed *sea
 }
 
 func (s *Server) codexAgentRecoveryModel(ctx context.Context, h http.Header) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, provider.CodexBase+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, provider.CodexBase+"/models?client_version="+url.QueryEscape(provider.CodexClientVersion()), nil)
 	if err != nil {
 		return "", recoveryFailure(502, "Agent recovery model lookup failed")
 	}

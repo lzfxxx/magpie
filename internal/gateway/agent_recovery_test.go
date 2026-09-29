@@ -68,6 +68,9 @@ func TestCodexEncryptedAgentRecovery(t *testing.T) {
 			h := recoveryHeaders()
 			chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == http.MethodGet {
+					if r.URL.Query().Get("client_version") == "" {
+						t.Error("model lookup omitted client_version")
+					}
 					io.WriteString(w, `{"models":[{"slug":"fallback","visibility":"list"},{"slug":"gpt-5.6-sol","visibility":"list"}]}`)
 					return
 				}

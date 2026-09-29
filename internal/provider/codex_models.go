@@ -26,6 +26,9 @@ import (
 // than the client asking.
 const codexClientVersion = "0.154.0"
 
+// CodexClientVersion is the version used when querying the native model list.
+func CodexClientVersion() string { return codexVersion() }
+
 // codexModels asks the ChatGPT backend which Codex models the account's own
 // plan has — a Free account lists fewer than a Plus or Pro one, and one it
 // doesn't have fails with a 400. It is the list Codex CLI keeps in
