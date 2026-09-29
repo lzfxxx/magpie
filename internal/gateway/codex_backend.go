@@ -80,6 +80,11 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body, compact := codexInput(body, true)
+			body, err = s.recoverCodexAgentInput(r.Context(), r.Header, body)
+			if err != nil {
+				writeError(w, provider.Responses, recoveryStatus(err), err.Error())
+				return
+			}
 			if compact {
 				s.codexCompact(w, r, body)
 				return

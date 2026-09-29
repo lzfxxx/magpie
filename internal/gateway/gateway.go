@@ -184,9 +184,13 @@ type Server struct {
 	lnMu sync.Mutex
 	ln   net.Listener
 	// the images described for models that can't see them (vision.go)
-	sightMu    sync.Mutex
-	sights     map[string]*sight
-	sightOrder []string
+	sightMu      sync.Mutex
+	sights       map[string]*sight
+	sightOrder   []string
+	agentCacheMu sync.Mutex
+	agentCache   map[string]agentRecovery
+	agentFlights map[string]*agentRecoveryFlight
+	agentBackoff map[string]time.Time
 }
 
 // New makes a gateway.
@@ -201,6 +205,9 @@ func New() *Server {
 			ForceAttemptHTTP2:     true,
 		}},
 		unfit:        make(map[string]bool),
+		agentCache:   make(map[string]agentRecovery),
+		agentFlights: make(map[string]*agentRecoveryFlight),
+		agentBackoff: make(map[string]time.Time),
 		subscription: newSubscriptionBridge(),
 		debug:        os.Getenv("MAGPIE_DEBUG") != "",
 	}
