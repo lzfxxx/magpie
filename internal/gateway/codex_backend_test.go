@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -684,5 +687,87 @@ func TestCodexModelListNotNarrowedWhileOff(t *testing.T) {
 	}
 	if got := native(); len(got) != 1 || got[0] != "gpt-6-sol" {
 		t.Errorf("switched on, the picks narrow again = %v (want just gpt-6-sol)", got)
+	}
+}
+
+func TestCodexNativeHiddenWhileSubscriptionOff(t *testing.T) {
+	codexSignedIn(t)
+	authPath := filepath.Join(os.Getenv("HOME"), ".codex", "auth.json")
+	beforeAuth, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Save(provider.Provider{ID: "codex", Off: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"native-v1"`)
+		io.WriteString(w, `{"models":[{"slug":"gpt-a"},{"slug":"gpt-b"}]}`)
+	}))
+	defer up.Close()
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	defer func() { provider.CodexBase = was }()
+	list := func() ([]string, string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", CodexPath+"/models", nil)
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		New().Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("models: %d %s", rec.Code, rec.Body)
+		}
+		var d struct{ Models []struct{ Slug string } }
+		if err := json.Unmarshal(rec.Body.Bytes(), &d); err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, m := range d.Models {
+			ids = append(ids, m.Slug)
+		}
+		return ids, rec.Header().Get("ETag")
+	}
+	before, tag := list()
+	if !slices.Contains(before, "gpt-a") || !slices.Contains(before, "relay/m1") {
+		t.Fatalf("initial list: %v", before)
+	}
+	if err := provider.SetHiddenModels("codex", []string{"codex/gpt-a", "codex/gpt-b"}); err != nil {
+		t.Fatal(err)
+	}
+	hidden, newTag := list()
+	if !slices.Equal(hidden, []string{"relay/m1"}) || newTag == tag {
+		t.Fatalf("hidden list %v; tag %q -> %q", hidden, tag, newTag)
+	}
+	header := http.Header{}
+	header.Set("X-Models-Etag", `"native-v1"`)
+	modelsEtag(header)
+	if header.Get("X-Models-Etag") != newTag {
+		t.Fatalf("response tag: %s, models tag: %s", header.Get("X-Models-Etag"), newTag)
+	}
+	if err := provider.SetOff("codex", false); err != nil {
+		t.Fatal(err)
+	}
+	if ids, _ := list(); slices.Contains(ids, "gpt-a") || slices.Contains(ids, "gpt-b") {
+		t.Fatalf("hidden native models returned after sharing enabled: %v", ids)
+	}
+	if err := provider.SetOff("codex", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetHiddenModels("codex", nil); err != nil {
+		t.Fatal(err)
+	}
+	restored, restoredTag := list()
+	if !slices.Equal(before, restored) || tag != restoredTag {
+		t.Fatalf("restored %v tag %q", restored, restoredTag)
+	}
+	afterAuth, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforeAuth, afterAuth) {
+		t.Fatal("visibility modified ChatGPT sign-in")
 	}
 }

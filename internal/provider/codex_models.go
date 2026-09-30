@@ -282,15 +282,41 @@ func CodexListed() []catalog.Model {
 // out of Codex's list (HiddenModels): the backend lists them, and the
 // gateway drops them from its /models answer as it does the ones not picked.
 func CodexNativeHidden() map[string]bool {
-	off := HiddenModels("codex")
-	if len(off) == 0 {
+	out := map[string]bool{}
+	for id := range HiddenModels("codex") {
+		if slug, ok := strings.CutPrefix(id, "codex/"); ok && slug != "" && !strings.Contains(slug, "/") {
+			out[slug] = true
+		}
+	}
+	return out
+}
+
+// CodexNativeEntries lists the signed-in account's native models for its
+// visibility editor, even when the subscription is not shared via magpie.
+// These entries never enter the shared catalog or become routing candidates.
+func CodexNativeEntries() []Entry {
+	p, err := Find("codex")
+	if err != nil || p.Account == nil || p.Account.Agent != "codex" {
 		return nil
 	}
-	out := map[string]bool{}
-	for _, e := range Catalog() {
-		if off[e.ID] && e.Group == "" && e.Provider.Account != nil && e.Provider.Account.Agent == "codex" {
-			out[e.Model] = true
+	ms := p.Available()
+	seen := map[string]bool{}
+	for _, m := range ms {
+		seen[m.ID] = true
+	}
+	for _, m := range catalog.Codex() {
+		if !seen[m.ID] {
+			ms = append(ms, m)
+			seen[m.ID] = true
 		}
+	}
+	picks, narrowed := CodexNativePicked()
+	var out []Entry
+	for _, m := range ms {
+		if strings.Contains(m.ID, "/") || narrowed && !picks[m.ID] {
+			continue
+		}
+		out = append(out, Entry{ID: "codex/" + m.ID, Model: m.ID, Name: m.Name, Provider: *p, Context: m.Context})
 	}
 	return out
 }

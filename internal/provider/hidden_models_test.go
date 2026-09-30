@@ -84,3 +84,27 @@ func TestHiddenModels(t *testing.T) {
 		t.Fatalf("still hidden %v", ids(hidden))
 	}
 }
+
+// Native visibility is independent of sharing the ChatGPT subscription.
+func TestCodexNativeHiddenWithProviderOff(t *testing.T) {
+	signIn(t)
+	if err := Save(Provider{ID: "codex", Off: true}); err != nil {
+		t.Fatal(err)
+	}
+	before := CodexListTag()
+	if err := SetHiddenModels("codex", []string{"codex/gpt-5.5", "codex/gpt-new", "relay/gpt-5.5"}); err != nil {
+		t.Fatal(err)
+	}
+	hidden := CodexNativeHidden()
+	if len(hidden) != 2 || !hidden["gpt-5.5"] || !hidden["gpt-new"] {
+		t.Fatalf("native hidden with sharing off: %v", hidden)
+	}
+	if CodexListTag() == before {
+		t.Fatal("native visibility did not change the model list tag")
+	}
+	for _, e := range Catalog() {
+		if e.Provider.ID == "codex" {
+			t.Fatalf("disabled subscription leaked into shared catalog: %s", e.ID)
+		}
+	}
+}

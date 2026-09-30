@@ -49,8 +49,25 @@ func takesCatalog(fields []fieldJSON) bool {
 	return false
 }
 
-func modelCount(id string) *modelCountJSON {
+// Native ChatGPT models belong to Codex's own picker even when the
+// subscription is switched off for other agents.
+func agentModelsListed(id string) []provider.Entry {
 	listed, _ := provider.ListedFor(id)
+	if id != "codex" {
+		return listed
+	}
+	out := make([]provider.Entry, 0, len(listed))
+	for _, e := range listed {
+		if e.Group == "" && e.Provider.Account != nil && e.Provider.Account.Agent == "codex" {
+			continue
+		}
+		out = append(out, e)
+	}
+	return append(out, provider.CodexNativeEntries()...)
+}
+
+func modelCount(id string) *modelCountJSON {
+	listed := agentModelsListed(id)
 	off := provider.HiddenModels(id)
 	c := &modelCountJSON{Listed: len(listed)}
 	for _, e := range listed {
@@ -80,7 +97,7 @@ func usedBy(a *agent.Agent, vals map[string]string, e provider.Entry) bool {
 }
 
 func agentModelList(a *agent.Agent) []agentModelJSON {
-	listed, _ := provider.ListedFor(a.ID)
+	listed := agentModelsListed(a.ID)
 	off := provider.HiddenModels(a.ID)
 	vals := a.Values()
 	out := []agentModelJSON{}

@@ -75,3 +75,56 @@ func TestAgentModelsAPI(t *testing.T) {
 		t.Fatalf("%+v", got.Count)
 	}
 }
+
+func TestAgentModelsNativeWithProviderOff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	dir := filepath.Join(home, ".codex")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.toml"), []byte("model = \"relay/m1\"\n"), 0o600)
+	os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"auth_mode":"chatgpt","tokens":{"access_token":"x","id_token":"h.e30.s"}}`), 0o600)
+	os.WriteFile(filepath.Join(dir, "models_cache.json"), []byte(`{"models":[{"slug":"gpt-a","visibility":"list"},{"slug":"gpt-b","visibility":"list"}]}`), 0o600)
+	if err := provider.Save(provider.Provider{ID: "codex", Off: true, Models: []string{"gpt-a"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	agentModelsAPI(mux)
+	call := func(method, body string) (out struct {
+		Models []agentModelJSON
+		Count  *modelCountJSON
+	}) { t.Helper(); w := httptest.NewRecorder(); mux.ServeHTTP(w, httptest.NewRequest(method, "/api/agent-models/codex", strings.NewReader(body))); if w.Code != 200 {
+		t.Fatalf("%s: %d %s", method, w.Code, w.Body)
+	}; if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}; return }
+	assertNative := func(ms []agentModelJSON, hidden bool) {
+		t.Helper()
+		n := 0
+		for _, m := range ms {
+			if strings.HasPrefix(m.ID, "codex/") {
+				n++
+				if m.Hidden != hidden {
+					t.Fatalf("native state: %+v", m)
+				}
+			}
+		}
+		if n != 2 {
+			t.Fatalf("native models unavailable with sharing off: %+v", ms)
+		}
+	}
+	assertNative(call("GET", "").Models, false)
+	got := call("POST", `{"hidden":["codex/gpt-a","codex/gpt-b"]}`)
+	assertNative(got.Models, true)
+	assertNative(call("GET", "").Models, true)
+	if got.Count.Shown != 1 || got.Count.Listed != 3 {
+		t.Fatalf("count: %+v", got.Count)
+	}
+	assertNative(call("POST", `{"hidden":[]}`).Models, false)
+}
