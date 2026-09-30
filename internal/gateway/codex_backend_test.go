@@ -587,3 +587,48 @@ func TestCodexThirdPartyCompactEndpointRejected(t *testing.T) {
 		t.Fatalf("%d %s, calls %d", code, body, f.calls)
 	}
 }
+
+// A codex provider switched off narrows nothing: it serves no agent
+// anything, so the account's own list is left whole, its picks kept for
+// when it is switched on again.
+func TestCodexModelListNotNarrowedWhileOff(t *testing.T) {
+	codexSignedIn(t)
+	if err := provider.Save(provider.Provider{ID: "codex", Models: []string{"gpt-6-sol"}, Off: true}); err != nil {
+		t.Fatal(err)
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"models":[{"slug":"gpt-6-sol","priority":1},{"slug":"gpt-5.5","priority":2}]}`)
+	}))
+	defer up.Close()
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	defer func() { provider.CodexBase = was }()
+
+	native := func() []string {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", CodexPath+"/models", nil)
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		New().Handler().ServeHTTP(rec, req)
+		var list struct {
+			Models []map[string]any `json:"models"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &list)
+		var out []string
+		for _, m := range list.Models {
+			slug, _ := m["slug"].(string)
+			if strings.HasPrefix(slug, "gpt-") {
+				out = append(out, slug)
+			}
+		}
+		return out
+	}
+	if got := native(); len(got) != 2 {
+		t.Errorf("switched off, the account's own models = %v (want both kept whole)", got)
+	}
+	if err := provider.SetOff("codex", false); err != nil {
+		t.Fatal(err)
+	}
+	if got := native(); len(got) != 1 || got[0] != "gpt-6-sol" {
+		t.Errorf("switched on, the picks narrow again = %v (want just gpt-6-sol)", got)
+	}
+}

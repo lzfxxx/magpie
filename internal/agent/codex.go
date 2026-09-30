@@ -426,11 +426,12 @@ func contains(xs []string, x string) bool {
 }
 
 // ownCodex is Codex's own models, narrowed to the ones ticked on its ChatGPT
-// subscription in magpie when any are.
+// subscription in magpie when any are — the subscription switched off, its
+// picks narrow nothing, as it serves no agent anything.
 func ownCodex() []catalog.Model {
 	ms := catalog.Codex()
 	p, err := provider.Find("codex")
-	if err != nil || len(p.Models) == 0 {
+	if err != nil || p.Off || len(p.Models) == 0 {
 		return ms
 	}
 	var out []catalog.Model

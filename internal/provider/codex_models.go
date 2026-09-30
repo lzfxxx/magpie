@@ -207,9 +207,13 @@ func CodexListed() []catalog.Model {
 // every model the account can reach; when the user has picked among them on
 // the codex provider, the gateway keeps its /models answer to those (see
 // codexModels). Not narrowed — the account's list is left whole.
+//
+// A provider switched off picks nothing, as it serves no agent anything
+// (Provider.Off): its picks are kept for when it is switched on again and
+// are not a narrowing now.
 func CodexNativePicked() (map[string]bool, bool) {
 	p, ok := find(All(), "codex")
-	if !ok || len(p.Models) == 0 {
+	if !ok || p.Off || len(p.Models) == 0 {
 		return nil, false
 	}
 	keep := make(map[string]bool, len(p.Models))
