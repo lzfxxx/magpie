@@ -393,6 +393,7 @@ const I18N = {
     "Remove {agent}'s {n} saved accounts?": "移除 {agent} 保存的 {n} 个账号？",
     "magpie forgets its copy of {users}. {agent}'s own files and sign-in, and the account itself, are left as they are.": "magpie 会移除它保存的 {users}。{agent} 自己的文件和登录，以及账号本身，都保持原样。",
     "signed in": "已登录",
+    "Unlimited": "无限",
     "{p} exposes no models yet — pick some below": "{p} 尚未暴露模型 — 在下方选几个",
     "Your providers file can't be read": "无法读取供应商配置文件",
     "magpie left it unchanged and lists no providers from it. Fix the file or move it aside, then reopen this page; until then, changes to providers are refused.": "magpie 没有改动它，也不会列出其中的供应商。请修复该文件或将其移走，然后重新打开此页；在此之前，对供应商的修改都会被拒绝。",

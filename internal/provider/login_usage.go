@@ -177,7 +177,11 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	if l.Agent == "copilot" {
 		for _, c := range copilotLogins(copilotConfigDir()) {
 			if strings.EqualFold(c.User, l.User) {
-				return copilotSubscriptionUsage(ctx, c.app.Token)
+				q := copilotSubscriptionUsage(ctx, c.app.Token)
+				if q.Error == "" {
+					refreshCopilotEntitlement(c.app, q.Plan, q.AccessSKU)
+				}
+				return q
 			}
 		}
 		return SubscriptionQuota{Provider: l.Agent, Plan: l.Plan, Windows: []QuotaWindow{}, Error: "not signed in"}

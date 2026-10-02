@@ -54,13 +54,14 @@ type QuotaWindow struct {
 // SubscriptionQuota is provider-reported allowance usage. This is separate
 // from Dial's local token log: vendors expose percentages, not token totals.
 type SubscriptionQuota struct {
-	Provider string        `json:"provider"`
-	Name     string        `json:"name"`
-	Icon     string        `json:"icon"`
-	Plan     string        `json:"plan,omitempty"`
-	User     string        `json:"user,omitempty"` // the account, so two of one vendor tell apart
-	Windows  []QuotaWindow `json:"windows"`
-	Balance  string        `json:"balance,omitempty"` // what is left on an API key, instead of windows
+	Provider  string        `json:"provider"`
+	Name      string        `json:"name"`
+	Icon      string        `json:"icon"`
+	Plan      string        `json:"plan,omitempty"`
+	AccessSKU string        `json:"accessSku,omitempty"`
+	User      string        `json:"user,omitempty"` // the account, so two of one vendor tell apart
+	Windows   []QuotaWindow `json:"windows"`
+	Balance   string        `json:"balance,omitempty"` // what is left on an API key, instead of windows
 	// BalanceParts are the Balance's amounts each apart, when the balance
 	// field the user wrote has several or a percent (cardParts)
 	BalanceParts []BalancePart `json:"balanceParts,omitempty"`
@@ -695,7 +696,7 @@ func (w codexWindow) window() QuotaWindow {
 func copilotSubscriptionUsage(ctx context.Context, githubToken string) SubscriptionQuota {
 	q := SubscriptionQuota{Provider: "copilot", Name: "Copilot", Icon: "githubcopilot", Windows: []QuotaWindow{}}
 	var data struct {
-		Plan      string                      `json:"copilot_plan"`
+		copilotEntitlement
 		Snapshots map[string]copilotQuotaWire `json:"quota_snapshots"`
 		Reset     string                      `json:"quota_reset_date_utc"`
 		ResetDay  string                      `json:"quota_reset_date"`
@@ -723,7 +724,7 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken string) Subscript
 		q.Error = err.Error()
 		return q
 	}
-	q.Plan = data.Plan
+	q.Plan, q.AccessSKU = data.label(), data.AccessSKU
 	// the allowances renew with the month, on the day GitHub says
 	var resets *time.Time
 	if t, err := time.Parse(time.RFC3339, data.Reset); err == nil {
@@ -733,6 +734,10 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken string) Subscript
 	}
 	for _, x := range []struct{ id, name string }{{"chat", "Chat requests"}, {"completions", "Completions"}, {"premium_interactions", "Premium requests"}} {
 		w, ok := data.Snapshots[x.id]
+		if ok && w.Unlimited {
+			q.Windows = append(q.Windows, QuotaWindow{Name: x.name, Display: "Unlimited", Aside: true})
+			continue
+		}
 		if !ok || !w.HasQuota || w.Entitlement <= 0 {
 			continue
 		}
@@ -745,6 +750,7 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken string) Subscript
 }
 
 type copilotQuotaWire struct {
+	Unlimited   bool    `json:"unlimited"`
 	HasQuota    bool    `json:"has_quota"`
 	Entitlement float64 `json:"entitlement"`
 	Remaining   float64 `json:"quota_remaining"`

@@ -47,9 +47,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         accountPlan({ agent: "grok-plugin", builtin: "grok" }),
         accountPlan({ agent: "grok" }),
         accountPlan({ agent: "fakeco", builtin: "fakeco", plan: "Max" }),
+        accountPlan({ agent: "copilot", plan: "Education" }),
+        accountPlan({ agent: "copilot", plan: "Pro+" }),
+        accountPlan({ agent: "copilot" }),
       ]);
       assert.deepEqual(plans.slice(0, 4), ["Cursor Pro", "Cursor Pro", "SuperGrok", "SuperGrok"]);
       assert.equal(plans[4], "Max");
+      assert.deepEqual(plans.slice(5), ["GitHub Education", "GitHub Pro+", "GitHub"]);
+      assert.equal(await page.evaluate(() => quotaText({ display: "Unlimited", used: 0 })), lang === "zh" ? "无限" : "Unlimited");
       assert.deepEqual(errors, []);
     });
   }

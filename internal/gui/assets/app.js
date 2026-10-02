@@ -7074,6 +7074,7 @@ function quotaFill(w) {
   return quotaLeft ? 100 - used : used;
 }
 function quotaText(w) {
+  if (w.display === "Unlimited") return t("Unlimited");
   const used = Math.max(0, Math.min(100, w.used));
   const n = quotaLeft ? 100 - used : used;
   const pct = t(quotaLeft ? "{n} left" : "{n} used", { n: (Number.isInteger(n) ? n : n.toFixed(1)) + "%" });
