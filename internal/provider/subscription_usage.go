@@ -22,6 +22,7 @@ import (
 
 // QuotaWindow is one rolling allowance reported by a subscription provider.
 type QuotaWindow struct {
+	Unlimited bool       `json:"unlimited,omitempty"`
 	Name      string     `json:"name"`
 	Used      float64    `json:"used"`
 	ResetsAt  *time.Time `json:"resetsAt,omitempty"`
@@ -726,6 +727,7 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken string) Subscript
 	}
 	q.Plan, q.AccessSKU = data.label(), data.AccessSKU
 	// the allowances renew with the month, on the day GitHub says
+	var unlimited []QuotaWindow
 	var resets *time.Time
 	if t, err := time.Parse(time.RFC3339, data.Reset); err == nil {
 		resets = &t
@@ -735,7 +737,7 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken string) Subscript
 	for _, x := range []struct{ id, name string }{{"chat", "Chat requests"}, {"completions", "Completions"}, {"premium_interactions", "Premium requests"}} {
 		w, ok := data.Snapshots[x.id]
 		if ok && w.Unlimited {
-			q.Windows = append(q.Windows, QuotaWindow{Name: x.name, Display: "Unlimited", Aside: true})
+			unlimited = append(unlimited, QuotaWindow{Name: x.name, Unlimited: true, Display: "Unlimited", Aside: true})
 			continue
 		}
 		if !ok || !w.HasQuota || w.Entitlement <= 0 {
@@ -746,6 +748,7 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken string) Subscript
 			Display: fmt.Sprintf("%s / %s", compactNumber(used), compactNumber(w.Entitlement)),
 			Span:    30 * 24 * time.Hour, Aside: x.id == "completions"})
 	}
+	q.Windows = append(q.Windows, unlimited...)
 	return q
 }
 

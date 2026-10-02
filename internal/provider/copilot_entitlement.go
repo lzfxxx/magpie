@@ -13,14 +13,14 @@ func (e copilotEntitlement) label() string {
 	if e.AccessSKU == "free_educational_quota" {
 		return "Education"
 	}
+	if e.AccessSKU == "free_limited_copilot" {
+		return "Free"
+	}
 	if name := copilotPlans[strings.ToLower(e.Plan)]; name != "" {
 		return name
 	}
 	if e.Plan != "" {
 		return strings.ToUpper(e.Plan[:1]) + e.Plan[1:]
-	}
-	if e.AccessSKU == "free_limited_copilot" {
-		return "Free"
 	}
 	return ""
 }
@@ -31,6 +31,8 @@ func refreshCopilotEntitlement(app copilotApp, plan, sku string) {
 	if plan == "" && sku == "" {
 		return
 	}
+	// Resolve external editor/CLI credentials before taking the shared login lock.
+	own, ownOK := copilotLogin(copilotConfigDir())
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
 	ls := readLogins()
@@ -41,8 +43,8 @@ func refreshCopilotEntitlement(app copilotApp, plan, sku string) {
 		}
 		current, valid := copilotSaved(*l)
 		if l.own() {
-			current, valid = copilotLogin(copilotConfigDir())
-			valid = valid && strings.EqualFold(current.User, app.User)
+			current, valid = own, ownOK
+			valid = valid && strings.EqualFold(firstNonEmpty(current.User, "GitHub"), app.User)
 		}
 		if !valid || current.Token != app.Token {
 			continue

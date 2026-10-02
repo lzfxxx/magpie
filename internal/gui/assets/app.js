@@ -6046,7 +6046,7 @@ const SUBS = [
   // so does Grok Build
   { agent: "grok", name: "Grok (SuperGrok)", icon: "xai", plans: "SuperGrok · X Premium+", own: true },
   // signed in with GitHub's device code; the editors' own sign-in stays theirs
-  { agent: "copilot", name: "Copilot", icon: "githubcopilot", plans: "Free · Education · Pro · Pro+ · Max · Business · Enterprise", own: true },
+  { agent: "copilot", name: "Copilot", icon: "githubcopilot", plans: "Free · Education · Pro · Pro+ · Business · Enterprise", own: true },
   // Z.ai's GLM Coding Plan, signed in as ZCode does; ZCode's own account is read too
   // sites: where the account is, Z.ai's or BigModel's (智谱), asked before
   // the sign-in opens; a team's plan (团队套餐) is signed in on its site too
@@ -7011,7 +7011,8 @@ function accountQuota(data, user) {
   }
   // the two rolling windows fit a line; the per-model ones go in its
   // tooltip; per-model windows of a family are the family's one
-  const ws = familyWindows(q.windows);
+  const ws = familyWindows(q.windows.filter((w) => !w.unlimited));
+  if (!ws.length) { line.append(el("span", "aq-none", t("Unlimited"))); return line; }
   if (ws.some((w) => w.members)) return poolLine(line, ws, q);
   line.title = ws.slice(2).map((w) => w.tiers ? tiersText(w) : t(w.name) + " " + quotaText(w)).join(ws !== q.windows ? "\n" : " · ");
   if (q.asOf) line.title = [line.title, asOfText(q)].filter(Boolean).join("\n");
@@ -7074,7 +7075,7 @@ function quotaFill(w) {
   return quotaLeft ? 100 - used : used;
 }
 function quotaText(w) {
-  if (w.display === "Unlimited") return t("Unlimited");
+  if (w.unlimited) return t("Unlimited");
   const used = Math.max(0, Math.min(100, w.used));
   const n = quotaLeft ? 100 - used : used;
   const pct = t(quotaLeft ? "{n} left" : "{n} used", { n: (Number.isInteger(n) ? n : n.toFixed(1)) + "%" });
@@ -8354,7 +8355,8 @@ function panelQuotaCard(q) {
   }
   if (q.asOf) card.title += "\n" + asOfText(q);
   // a pool's 5-hour and weekly rings, two pools of them, else three
-  const fam = familyWindows(q.windows);
+  const fam = familyWindows(q.windows.filter((w) => !w.unlimited));
+  if (!fam.length && q.windows.some((w) => w.unlimited)) { card.append(el("span", "pq-sub", t("Unlimited"))); return card; }
   const ws = fam.slice(0, fam.some((w) => w.members) ? 4 : 3);
   // when the windows begun start again: the first bare, the others by name
   const begun = ws.filter((w) => w.resetsAt && w.used > 0);
@@ -8668,7 +8670,8 @@ function quotaWindows(sub) {
     const fill = el("i");
     fill.style.width = `${quotaFill(w)}%`;
     track.append(fill);
-    quota.append(labels, track);
+    quota.append(labels);
+    if (!w.unlimited) quota.append(track);
     // when it starts again, on the clock and how long until then
     if (w.resetsAt) {
       const at = new Date(w.resetsAt);

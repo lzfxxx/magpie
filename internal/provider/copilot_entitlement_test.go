@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -13,6 +14,7 @@ func TestCopilotEntitlementLabels(t *testing.T) {
 		{"individual", "free_educational_quota", "Education"},
 		{"free", "free_educational_quota", "Education"},
 		{"individual", "unknown-sku", "Pro"},
+		{"individual", "free_limited_copilot", "Free"},
 		{"individual_pro", "", "Pro+"}, {"business", "", "Business"},
 		{"enterprise", "", "Enterprise"}, {"free", "", "Free"},
 		{"", "free_limited_copilot", "Free"}, {"", "unknown-sku", ""},
@@ -101,8 +103,11 @@ func TestCopilotEducationQuotaRefresh(t *testing.T) {
 	if q.Error != "" || q.Plan != "Education" || q.AccessSKU != "free_educational_quota" || len(q.Windows) != 3 {
 		t.Fatalf("quota: %+v", q)
 	}
-	for _, w := range q.Windows[:2] {
-		if w.Display != "Unlimited" || w.Used != 0 || !w.Aside {
+	if q.Windows[0].Name != "Premium requests" {
+		t.Fatalf("counted quota not first: %+v", q.Windows)
+	}
+	for _, w := range q.Windows[1:] {
+		if !w.Unlimited || w.Display != "Unlimited" || w.Used != 0 || !w.Aside {
 			t.Fatalf("unlimited: %+v", w)
 		}
 	}
@@ -115,5 +120,18 @@ func TestCopilotEducationQuotaRefresh(t *testing.T) {
 		if l.User == "hubot" && l.Plan != "Education" {
 			t.Fatal("failed read erased plan")
 		}
+	}
+}
+
+func TestCopilotOwnEntitlementWithoutUser(t *testing.T) {
+	signIn(t)
+	writeFile(t, filepath.Join(copilotConfigDir(), "github-copilot", "apps.json"), map[string]any{"github.com": map[string]any{"oauth_token": "gho_x"}})
+	ls := copilotLoginList()
+	if len(ls) != 1 || ls[0].User != "GitHub" {
+		t.Fatalf("logins %+v", ls)
+	}
+	refreshCopilotEntitlement(copilotApp{User: "GitHub", Token: "gho_x"}, "Free", "free_limited_copilot")
+	if got := copilotLoginList()[0].Plan; got != "Free" {
+		t.Fatalf("plan %q", got)
 	}
 }
