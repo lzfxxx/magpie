@@ -844,6 +844,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// the upstream names in force for this request, read once here rather
 	// than once per place a name is looked up below
 	r = withWires(r)
+	if from == provider.Responses {
+		// Normalize standalone notifications before either relaying or translating.
+		body = orphanedToolOutputs(body)
+	}
 	// secrets go as placeholders and come back as they were; the log has
 	// what the vendor saw and said
 	w, body, unmask := redacted(w, body)

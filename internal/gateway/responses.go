@@ -401,6 +401,53 @@ func parseResponses(body []byte) (*Request, error) {
 	return r, nil
 }
 
+// orphanedToolOutputs turns a tool result with no call ID into a user message.
+// Codex uses standalone outputs for cross-thread notifications. Backends
+// requiring paired outputs still need the delivered text, without a fake call ID.
+func orphanedToolOutputs(body []byte) []byte {
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body
+	}
+	var input []json.RawMessage
+	if json.Unmarshal(q["input"], &input) != nil {
+		return body
+	}
+	changed := false
+	for i, raw := range input {
+		var item struct {
+			Type   string          `json:"type"`
+			CallID string          `json:"call_id"`
+			Output json.RawMessage `json:"output"`
+		}
+		if json.Unmarshal(raw, &item) != nil || item.Type != "function_call_output" || item.CallID != "" {
+			continue
+		}
+		text, images := toolOutput(item.Output)
+		content := []map[string]any{}
+		if text != "" {
+			content = append(content, map[string]any{"type": "input_text", "text": text})
+		}
+		for _, image := range images {
+			content = append(content, map[string]any{"type": "input_image", "image_url": dataURL(image)})
+		}
+		if len(content) == 0 {
+			content = append(content, map[string]any{"type": "input_text", "text": "Tool result received."})
+		}
+		input[i], _ = json.Marshal(map[string]any{"type": "message", "role": "user", "content": content})
+		changed = true
+	}
+	if !changed {
+		return body
+	}
+	q["input"], _ = json.Marshal(input)
+	out, err := json.Marshal(q)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
 // mergeTurns joins consecutive messages of the same role, since the
 // Responses API splits an assistant turn into one item per part.
 func mergeTurns(msgs []Message) []Message {
