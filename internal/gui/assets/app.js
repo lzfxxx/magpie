@@ -3056,7 +3056,7 @@ function accountPlan(a) {
     return name + " " + plan;
   };
   if (agent === "codex") return named("ChatGPT", a.plan && cap(a.plan));
-  if (agent === "copilot") return "GitHub";
+  if (agent === "copilot") return named("GitHub", a.plan && cap(a.plan));
   if (agent === "claude") return named("Claude", a.plan && cap(a.plan));
   if (agent === "cursor") return named("Cursor", a.plan && cap(a.plan));
   if (agent === "grok") return a.plan || "SuperGrok";
@@ -6046,7 +6046,7 @@ const SUBS = [
   // so does Grok Build
   { agent: "grok", name: "Grok (SuperGrok)", icon: "xai", plans: "SuperGrok · X Premium+", own: true },
   // signed in with GitHub's device code; the editors' own sign-in stays theirs
-  { agent: "copilot", name: "Copilot", icon: "githubcopilot", plans: "Pro · Pro+ · Business", own: true },
+  { agent: "copilot", name: "Copilot", icon: "githubcopilot", plans: "Free · Education · Pro · Pro+ · Max · Business · Enterprise", own: true },
   // Z.ai's GLM Coding Plan, signed in as ZCode does; ZCode's own account is read too
   // sites: where the account is, Z.ai's or BigModel's (智谱), asked before
   // the sign-in opens; a team's plan (团队套餐) is signed in on its site too
