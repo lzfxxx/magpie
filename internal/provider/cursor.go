@@ -237,8 +237,14 @@ func cursorLinkWhole(link string) bool {
 		return false
 	}
 	q := u.Query()
-	return q.Get("challenge") != "" && q.Get("uuid") != ""
+	// The CLI may wrap after the UUID, with the remaining login parameters
+	// arriving in another pipe write. Credentials alone do not finish its URL.
+	return q.Get("challenge") != "" && cursorLoginUUID.MatchString(q.Get("uuid")) &&
+		q.Get("mode") == "login" && q.Get("redirectTarget") == "cli" &&
+		(q.Get("supportsSelectedTeamLogin") == "true" || q.Get("supportsSelectedTeamLogin") == "false")
 }
+
+var cursorLoginUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // cursorVersionFallback is the CLI version said when no install names one.
 const cursorVersionFallback = "2026.09.23-86fc751"
