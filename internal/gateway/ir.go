@@ -43,9 +43,10 @@ type Part struct {
 	Args json.RawMessage // a JSON object
 
 	// tool_result
-	CallID  string
-	IsError bool
-	Images  []Part // the images the tool returned beside its text
+	CallID     string
+	IsError    bool
+	Images     []Part         // the images the tool returned beside its text
+	Standalone map[string]any // native Responses notification with no call ID
 
 	// thinking
 	Signature string

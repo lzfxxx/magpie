@@ -28,6 +28,8 @@ func TestStandaloneToolOutputResponsesRoutes(t *testing.T) {
 				{"ordinary", `[{"type":"message","role":"user","content":[{"type":"input_text","text":"ordinary"}]}]`, false},
 				{"paired", `[{"type":"function_call","call_id":"call_synthetic","name":"echo","arguments":"{}"},{"type":"function_call_output","call_id":"call_synthetic","output":"paired result"}]`, false},
 				{"standalone", `[{"type":"function_call","call_id":"call_synthetic","name":"echo","arguments":"{}"},{"type":"function_call_output","call_id":"call_synthetic","output":"paired result"},{"type":"function_call_output","id":"fco_synthetic","name":"send_message_to_thread","namespace":"codex_app","output":"<codex_delegation>synthetic delivery</codex_delegation>"}]`, true},
+				{"custom_missing", `[{"type":"custom_tool_call_output","output":"synthetic delivery"}]`, true},
+				{"custom_empty", `[{"type":"custom_tool_call_output","call_id":"","output":"synthetic delivery"}]`, true},
 				{"empty_id", `[{"type":"function_call_output","call_id":"","output":"synthetic delivery"}]`, true},
 			} {
 				t.Run(endpoint+"/"+route+"/"+tc.name, func(t *testing.T) {

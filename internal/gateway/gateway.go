@@ -844,10 +844,6 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// the upstream names in force for this request, read once here rather
 	// than once per place a name is looked up below
 	r = withWires(r)
-	if from == provider.Responses {
-		// Normalize standalone notifications before either relaying or translating.
-		body = orphanedToolOutputs(body)
-	}
 	// secrets go as placeholders and come back as they were; the log has
 	// what the vendor saw and said
 	w, body, unmask := redacted(w, body)
@@ -1544,6 +1540,11 @@ func sinceStart(before, d time.Duration) int64 {
 // attempt sends a request to one provider. call.To stays empty when the
 // provider has no endpoint to send it to.
 func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.Protocol, p provider.Provider, model string, body []byte, call *Call) (int, string) {
+	// Normalize for the actual destination, separately on each fallback.
+	// Native ChatGPT accounts accept standalone tool outputs themselves.
+	if from == provider.Responses && (p.Account == nil || p.Account.Agent != "codex") {
+		body = orphanedToolOutputs(body)
+	}
 	// every request to the provider goes through its own proxy, if it has
 	// one (#237)
 	r = r.WithContext(p.Via(r.Context()))

@@ -221,7 +221,8 @@ func parseResponses(body []byte) (*Request, error) {
 		// written to the vendor's cache again (Anthropic's system comes
 		// first; a Claude subscription's waiting run is found by it) (#502)
 		replied := false
-		for _, it := range items {
+		var rawItems []json.RawMessage // decoded only for native standalone outputs
+		for i, it := range items {
 			if it.Role == "assistant" || strings.HasPrefix(it.Type, "function_call") || strings.HasPrefix(it.Type, "custom_tool_call") || strings.HasPrefix(it.Type, "tool_search") || it.Type == "reasoning" {
 				replied = true
 			}
@@ -276,7 +277,17 @@ func parseResponses(body []byte) (*Request, error) {
 				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: it.CallID, Text: searchFound(it.Tools)}}})
 			case it.Type == "function_call_output" || it.Type == "custom_tool_call_output":
 				out, images := toolOutput(it.Output)
-				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: it.CallID, Text: out, Images: images}}})
+				part := Part{Kind: ToolResult, CallID: it.CallID, Text: out, Images: images}
+				if it.CallID == "" {
+					// Native account requests may still need translation to
+					// collect a streamed response for a non-streaming client.
+					// Retain the original notification, including absent IDs.
+					if rawItems == nil {
+						_ = json.Unmarshal(q.Input, &rawItems)
+					}
+					_ = json.Unmarshal(rawItems[i], &part.Standalone)
+				}
+				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{part}})
 			case it.Type == "reasoning":
 				// the reasoning itself when the item carries it, else its
 				// summary (all magpie gives a client of a translated reply)
@@ -414,13 +425,41 @@ func orphanedToolOutputs(body []byte) []byte {
 		return body
 	}
 	changed := false
-	for i, raw := range input {
+	out := make([]json.RawMessage, 0, len(input))
+	var pending []json.RawMessage
+	inCalls, hadResults := false, false
+	flush := func() {
+		out = append(out, pending...)
+		pending = nil
+	}
+	for _, raw := range input {
 		var item struct {
 			Type   string          `json:"type"`
 			CallID string          `json:"call_id"`
 			Output json.RawMessage `json:"output"`
 		}
-		if json.Unmarshal(raw, &item) != nil || item.Type != "function_call_output" || item.CallID != "" {
+		if json.Unmarshal(raw, &item) != nil {
+			flush()
+			inCalls = false
+			out = append(out, raw)
+			continue
+		}
+		isOutput := item.Type == "function_call_output" || item.Type == "custom_tool_call_output"
+		if !isOutput || item.CallID != "" {
+			switch item.Type {
+			case "function_call", "custom_tool_call", "tool_search_call":
+				if hadResults {
+					flush()
+				}
+				inCalls, hadResults = true, false
+			case "function_call_output", "custom_tool_call_output", "tool_search_output":
+				// Keep a run of tool results directly after its calls.
+				hadResults = true
+			default:
+				flush()
+				inCalls = false
+			}
+			out = append(out, raw)
 			continue
 		}
 		text, images := toolOutput(item.Output)
@@ -434,18 +473,26 @@ func orphanedToolOutputs(body []byte) []byte {
 		if len(content) == 0 {
 			content = append(content, map[string]any{"type": "input_text", "text": "Tool result received."})
 		}
-		input[i], _ = json.Marshal(map[string]any{"type": "message", "role": "user", "content": content})
+		message, _ := marshalPlain(map[string]any{"type": "message", "role": "user", "content": content})
+		if inCalls {
+			// Chat rejects a user message between tool_calls and results,
+			// including between the results of parallel calls.
+			pending = append(pending, message)
+		} else {
+			out = append(out, message)
+		}
 		changed = true
 	}
+	flush()
 	if !changed {
 		return body
 	}
-	q["input"], _ = json.Marshal(input)
-	out, err := json.Marshal(q)
+	q["input"], _ = marshalPlain(out)
+	encoded, err := marshalPlain(q)
 	if err != nil {
 		return body
 	}
-	return out
+	return encoded
 }
 
 // mergeTurns joins consecutive messages of the same role, since the
@@ -543,6 +590,10 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 				input = append(input, map[string]any{"type": "function_call", "call_id": id, "name": p.Name, "arguments": argsString(p)})
 			case ToolResult:
 				flushMsg()
+				if p.Standalone != nil {
+					input = append(input, p.Standalone)
+					continue
+				}
 				var output any = p.Text
 				if len(p.Images) > 0 {
 					// an output can be a list of text and images
